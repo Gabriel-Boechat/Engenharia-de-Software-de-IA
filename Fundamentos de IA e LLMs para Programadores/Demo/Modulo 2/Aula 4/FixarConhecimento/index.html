@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detecção de Objetos em Tempo Real | TensorFlow.js</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #ffffff;
+        }
+        h1 {
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        p {
+            color: #aaaaaa;
+            margin-bottom: 30px;
+        }
+        .video-container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            background-color: #000;
+        }
+        #webcam {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Permite clicar através do canvas se necessário */
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #333;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .loading { color: #f39c12; }
+        .ready { color: #2ecc71; }
+    </style>
+</head>
+<body>
+
+    <h1>Visão Computacional no Navegador</h1>
+    <p>Rodando TensorFlow.js sem nenhum back-end.</p>
+
+    <div class="video-container">
+        <!-- O vídeo da webcam vai aqui -->
+        <video id="webcam" autoplay playsinline muted></video>
+        <!-- O canvas onde desenharemos as caixas de detecção vai por cima do vídeo -->
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div id="status" class="loading">⏳ Carregando modelo de IA (Aguarde...)</div>
+
+    <!-- Importando o TensorFlow.js e o modelo COCO-SSD via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+    <script>
+        // 1. Configuração Inicial
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const statusDiv = document.getElementById('status');
+        let model;
+
+        // 2. Função principal para inicializar tudo
+        async function init() {
+            try {
+                // Carrega o modelo de Machine Learning
+                model = await cocoSsd.load();
+                
+                statusDiv.textContent = "📷 Solicitando acesso à câmera...";
+                
+                // Solicita acesso à webcam do usuário
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                
+                video.srcObject = stream;
+
+                // Quando o vídeo estiver pronto, ajusta o canvas e começa a detecção
+                video.addEventListener('loadeddata', () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    statusDiv.textContent = "✅ IA Ativa! Aponte objetos para a câmera.";
+                    statusDiv.className = "ready";
+                    
+                    // Inicia o loop de detecção
+                    detectFrame();
+                });
+
+            } catch (error) {
+                console.error("Erro na inicialização:", error);
+                statusDiv.textContent = "❌ Erro: Verifique a permissão da câmera ou o console.";
+                statusDiv.style.color = "#e74c3c";
+            }
+        }
+
+        // 3. Loop de Detecção Contínua
+        async function detectFrame() {
+            if (model && video.readyState === 4) {
+                // Faz a predição passando o elemento de vídeo diretamente para o modelo
+                const predictions = await model.detect(video);
+                
+                // Limpa o frame anterior no canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Desenha as novas detecções
+                drawPredictions(predictions);
+            }
+            
+            // Chama a função novamente para o próximo frame da tela (loop infinito otimizado)
+            requestAnimationFrame(detectFrame);
+        }
+
+        // 4. Função para desenhar os resultados na tela
+        function drawPredictions(predictions) {
+            predictions.forEach(prediction => {
+                // Extrai as coordenadas e dimensões da caixa delimitadora
+                const [x, y, width, height] = prediction.bbox;
+                
+                // Configura o estilo da caixa (Verde neon)
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(x, y, width, height);
+                
+                // Configura o fundo do texto
+                ctx.fillStyle = '#00FF00';
+                ctx.fillRect(x, y - 25, width, 25);
+                
+                // Configura o texto (Nome do objeto + Porcentagem de confiança)
+                ctx.fillStyle = '#000000';
+                ctx.font = 'bold 16px Arial';
+                const text = `${prediction.class.toUpperCase()} (${Math.round(prediction.score * 100)}%)`;
+                ctx.fillText(text, x + 5, y - 7);
+            });
+        }
+
+        // Inicia a aplicação
+        init();
+    </script>
+</body>
+</html>
