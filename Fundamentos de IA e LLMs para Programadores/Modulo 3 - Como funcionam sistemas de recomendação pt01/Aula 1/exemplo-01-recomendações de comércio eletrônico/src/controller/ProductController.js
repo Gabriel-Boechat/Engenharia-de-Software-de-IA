@@ -1,75 +1,51 @@
-export class ModelController {
-    #modelView;
-    #userService;
-    #events;
+export class ProductController {
+    #productView;
     #currentUser = null;
-    #alreadyTrained = false;
+    #events;
+    #productService;
     constructor({
-        modelView,
-        userService,
+        productView,
         events,
+        productService
     }) {
-        this.#modelView = modelView;
-        this.#userService = userService;
+        this.#productView = productView;
+        this.#productService = productService;
         this.#events = events;
-
         this.init();
     }
 
     static init(deps) {
-        return new ModelController(deps);
+        return new ProductController(deps);
     }
 
     async init() {
         this.setupCallbacks();
+        this.setupEventListeners();
+        const products = await this.#productService.getProducts();
+        this.#productView.render(products, true);
     }
 
-    setupCallbacks() {
-        this.#modelView.registerTrainModelCallback(this.handleTrainModel.bind(this));
-        this.#modelView.registerRunRecommendationCallback(this.handleRunRecommendation.bind(this));
+    setupEventListeners() {
 
         this.#events.onUserSelected((user) => {
             this.#currentUser = user;
-            if (!this.#alreadyTrained) return
-            this.#modelView.enableRecommendButton();
-        });
-
-        this.#events.onTrainingComplete(() => {
-            this.#alreadyTrained = true;
-            if (!this.#currentUser) return
-            this.#modelView.enableRecommendButton();
+            this.#productView.onUserSelected(user);
+            this.#events.dispatchRecommend(user)
         })
 
-        this.#events.onUsersUpdated(
-            async (...data) => {
-                return this.refreshUsersPurchaseData(...data);
-            }
-        );
-        this.#events.onProgressUpdate(
-            (progress) => {
-                this.handleTrainingProgressUpdate(progress);
-            }
-        );
-
+        this.#events.onRecommendationsReady(({ recommendations }) => {
+            this.#productView.render(recommendations, false);
+        });
     }
 
-
-    async handleTrainModel() {
-        const users = await this.#userService.getUsers();
-
-        this.#events.dispatchTrainModel(users);
+    setupCallbacks() {
+        this.#productView.registerBuyProductCallback(this.handleBuyProduct.bind(this));
     }
 
-    handleTrainingProgressUpdate(progress) {
-        this.#modelView.updateTrainingProgress(progress);
-    }
-    async handleRunRecommendation() {
-        const currentUser = this.#currentUser;
-        const updatedUser = await this.#userService.getUserById(currentUser.id);
-        this.#events.dispatchRecommend(updatedUser);
+    async handleBuyProduct(product) {
+        const user = this.#currentUser;
+        this.#events.dispatchPurchaseAdded({ user, product });
     }
 
-    async refreshUsersPurchaseData({ users }) {
-        this.#modelView.renderAllUsersPurchases(users);
-    }
 }
+
